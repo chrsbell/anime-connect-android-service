@@ -1,0 +1,1 @@
+rootProject.name = "com.example.anime-connect-android-services"
