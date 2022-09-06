@@ -1,5 +1,6 @@
 package com.example
 
+import com.typesafe.config.ConfigFactory
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -7,13 +8,12 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.config.*
 import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sessions.*
 import java.security.SecureRandom
-
-data class UserSession(val accessToken: String)
 
 val applicationHttpClient = HttpClient(CIO) {
     install(ContentNegotiation) {
@@ -22,9 +22,7 @@ val applicationHttpClient = HttpClient(CIO) {
 }
 
 fun Application.module(httpClient: HttpClient = applicationHttpClient) {
-    install(Sessions) {
-        cookie<UserSession>("user_session")
-    }
+    val redirectHost = environment.config.tryGetString("ktor.deployment.redirectHost")
     val port = (environment as ApplicationEngineEnvironment).connectors.first().port
     install(Authentication) {
         oauth("auth-oauth-mal") {
@@ -34,7 +32,7 @@ fun Application.module(httpClient: HttpClient = applicationHttpClient) {
             val codeVerifier = bytes.toHexString()
             val clientId = System.getenv("MAL_CLIENT_ID")
             val clientSecret = System.getenv("MAL_CLIENT_SECRET")
-            urlProvider = { "http://localhost:$port/callback" }
+            urlProvider = { "http://$redirectHost:$port/callback" }
             providerLookup = {
                 OAuthServerSettings.OAuth2ServerSettings(
                     name = "mal",
@@ -62,20 +60,16 @@ fun Application.module(httpClient: HttpClient = applicationHttpClient) {
             get("/login") {}
             get("/callback") {
                 val principal: OAuthAccessTokenResponse.OAuth2? = call.principal()
-                call.sessions.set(UserSession(principal?.accessToken.toString()))
-                call.respondRedirect("/hello")
-            }
-        }
-        get("/hello") {
-            val userSession: UserSession? = call.sessions.get()
-            if (userSession != null) {
-                call.respond(HttpStatusCode.OK)
-            } else {
-                call.respondRedirect("/login")
+                call.response.cookies.append(
+                    name = "access_token",
+                    value = principal?.accessToken.toString(),
+                    // want to use short-lived cookie bc can't access response headers from web view apparently
+                    maxAge = 0L
+                )
+                call.respondRedirect("/")
             }
         }
         get("/logout") {
-            call.sessions.clear<UserSession>()
             call.respond(HttpStatusCode.OK)
         }
     }

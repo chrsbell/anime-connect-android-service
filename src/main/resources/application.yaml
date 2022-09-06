@@ -1,7 +1,13 @@
 ktor:
+  development: true
   deployment:
     port: 3000
-    host: localhost
+    # actual server address
+    # host: 192.168.1.9 # for local device on network
+    host: localhost # for emulator
+    # android emulator uses a special address to access dev machine
+    redirectHost: 10.0.2.2 # for emulator
+    # redirectHost: 192.168.1.9 # for local device on network
   application:
     modules:
       - com.example.ApplicationKt.module
